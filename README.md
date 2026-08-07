@@ -13,7 +13,7 @@ Whisker stimulation device for in vivo rodent neurobiology experiments. Uses a p
 # Circuit Schematic
 <img width="1380" height="956" alt="image" src="https://github.com/user-attachments/assets/0de94d24-2faf-4ad9-8cc7-bc52dd2bdb6c" />
 
-# Usage Example*
+# Usage Example
 
 <img width="605" height="527" alt="image" src="https://github.com/user-attachments/assets/4d9204f7-448a-44e4-a6dd-bc34831242ff" />
 
