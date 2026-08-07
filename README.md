@@ -2,16 +2,20 @@
 Whisker stimulation device for in vivo rodent neurobiology experiments. Uses a pneumatic system controlled by an electromagnetic solenoid valve to direct intermittent air puffs onto a rodent’s whisker pad.
 
 
-
+# Overview
 
 
 * Air is intermittently puffed onto a rodent’s whisker pad while cellular & vascular activity in the corresponding barrel cortex is recorded with widefield microscopy
 * Arduino-based system
 * Pneumatic system that delivers room air supply through a nozzle towards the rodent’s whisker pad. The air is pulsed (optionally at randomly varying frequencies) to reduce the rodent’s habituation to the stimulus. This change in airflow is switched through an N-channel MOSFET driving a 3-way electromagnetic solenoid valve.
 
-*Circuit Schematic*
+# Circuit Schematic
 <img width="1380" height="956" alt="image" src="https://github.com/user-attachments/assets/0de94d24-2faf-4ad9-8cc7-bc52dd2bdb6c" />
 
-*Usage Example*
+# Usage Example*
 
 <img width="605" height="527" alt="image" src="https://github.com/user-attachments/assets/4d9204f7-448a-44e4-a6dd-bc34831242ff" />
+
+# Bill of Materials
+
+# User Guide
