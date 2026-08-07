@@ -17,5 +17,13 @@ Whisker stimulation device for in vivo rodent neurobiology experiments. Uses a p
 <img width="605" height="527" alt="image" src="https://github.com/user-attachments/assets/4d9204f7-448a-44e4-a6dd-bc34831242ff" />
 
 # Bill of Materials
+| Component | Part | Notes |
+|-----------|------|-------|
+| Microcontroller | Arduino UNO R3 | USB-powered |
+| MOSFET | IRLB8721 | Logic-level N-channel |
+| Solenoid valve | 3-way, 6 V | External supply |
+| Gate resistor | 270 Ω | Gate to Arduino pin |
+| Pneumatic Tubing| 3mm Silicone Tubing | Connect between air supply and solenoid valve input port |
+| Switch | SPDT toggle | Override for on/off control |
 
 # User Guide
