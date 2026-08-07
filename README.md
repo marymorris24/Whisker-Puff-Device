@@ -1,6 +1,9 @@
 # Whisker-Puff-Device
 Whisker stimulation device for in vivo rodent neurobiology experiments. Uses a pneumatic system controlled by an electromagnetic solenoid valve to direct intermittent air puffs onto a rodent’s whisker pad.
 
+<img width="1380" height="956" alt="image" src="https://github.com/user-attachments/assets/0de94d24-2faf-4ad9-8cc7-bc52dd2bdb6c" />
+
+
 
 * Air is intermittently puffed onto a rodent’s whisker pad while cellular & vascular activity in the corresponding barrel cortex is recorded with widefield microscopy
 * Arduino-based system
