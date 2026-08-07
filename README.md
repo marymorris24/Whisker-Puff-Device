@@ -27,3 +27,4 @@ Whisker stimulation device for in vivo rodent neurobiology experiments. Uses a p
 | Switch | SPDT toggle | Override for on/off control |
 
 # User Guide
+[Whisker Puff User Guide](https://github.com/marymorris24/Whisker-Puff-Device/blob/main/Copy%20of%20Guide%20To%20Airpuff%20Stimulation.pdf)
