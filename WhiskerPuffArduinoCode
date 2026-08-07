@@ -1,0 +1,395 @@
+// ====================================
+// MULTI-INPUT PUMP CONTROL PROGRAM
+//jan 28 - version 2: with random mode! 
+//one solenoid version
+
+// ====================================
+// PIN DEFINITIONS
+// ====================================
+const int PUMP_PIN = 9;        // Output to pump/solenoid
+const int SWITCH_PIN = 7;      // Physical switch input
+const int MCU_SIGNAL_PIN = 8;  // Input from another microcontroller
+
+
+const int sol2 = 4; // second solenoid - not in use yet
+// ====================================
+// CONTROL SOURCE ENUM
+// ====================================
+enum ControlSource {
+  SOURCE_NONE,
+  SOURCE_PIN7,
+  SOURCE_PIN8,
+  SOURCE_SERIAL
+};
+
+// ====================================
+// STATE VARIABLES
+// ====================================
+// Current pump control state
+bool pumpShouldBeOn = false;
+ControlSource lastControlSource = SOURCE_NONE;
+unsigned long lastControlChangeTime = 0;
+
+// Serial control state
+bool serialPumpRunning = false;
+int selectedFreq = 5;
+unsigned long pulseInterval = 100;
+unsigned long lastPulseTime = 0;
+bool pulseState = false;
+
+// Random mode variables
+bool randomMode = false;
+int randomFreqOptions[] = {1, 2, 5}; // Available frequencies for random mode
+int currentRandomFreq = 5;
+
+// Pin 7 switch debouncing
+bool switch7State = LOW;
+bool lastSwitch7Reading = LOW;
+unsigned long lastSwitch7DebounceTime = 0;
+const unsigned long debounceDelay = 250;
+
+// Pin 8 MCU signal debouncing
+bool mcu8State = LOW;
+bool lastMcu8Reading = LOW;
+unsigned long lastMcu8DebounceTime = 0;
+// ====================================
+// PRINT MENU
+// ====================================
+void printMenu() {
+  Serial.println(F("\n========================================"));
+  Serial.println(F("   MULTI-INPUT PUMP CONTROLLER"));
+  Serial.println(F("========================================"));
+  Serial.println(F("ALL INPUTS ALWAYS ACTIVE:"));
+  Serial.println(F("  - Pin 7: Physical Switch (LOW=ON)"));
+  Serial.println(F("  - Pin 8: MCU Signal (HIGH=ON)"));
+  Serial.println(F("  - Serial: Commands"));
+  Serial.println();
+  Serial.println(F("Most recent input takes control!"));
+  Serial.println();
+  Serial.println(F("SERIAL COMMANDS:"));
+  Serial.println(F("  Frequency:"));
+  Serial.println(F("    1 = Set to 1 Hz  (500ms ON/OFF)"));
+  Serial.println(F("    2 = Set to 2 Hz  (250ms ON/OFF)"));
+  Serial.println(F("    5 = Set to 5 Hz  (100ms ON/OFF)"));
+  Serial.println(F("    R = Random Mode (1/2/5 Hz)"));
+  Serial.println();
+  Serial.println(F("  Control:"));
+  Serial.println(F("    S = Start pulsing"));
+  Serial.println(F("    X = Stop pump"));
+  Serial.println(F("    I = Show status"));
+  Serial.println(F("    M = Show menu"));
+  Serial.println(F("========================================\n"));
+  
+  printStatus();
+}
+// ====================================
+// SETUP FUNCTION
+// ====================================
+void setup() {
+  Serial.begin(9600);
+  delay(1000);
+
+  // Configure pins
+  pinMode(PUMP_PIN, OUTPUT);
+  pinMode(SWITCH_PIN, INPUT_PULLUP);  // Use internal pullup for switch
+  pinMode(MCU_SIGNAL_PIN, INPUT_PULLUP);     // Pin 8 can receive signals from another MCU
+  
+  digitalWrite(PUMP_PIN, LOW);
+  
+  
+  // Initialize switch state by reading it
+  switch7State = digitalRead(SWITCH_PIN);
+  lastSwitch7Reading = switch7State;
+
+  // Seed random number generator
+  randomSeed(analogRead(0));
+
+  printMenu();
+}
+
+// ====================================
+// MAIN LOOP
+// ====================================
+void loop() {
+  // Read and debounce Pin 7 (physical switch)
+  debouncePin7();
+  
+  // Read and debounce Pin 8 (MCU signal)
+  debouncePin8();
+  
+  // Check for serial input
+  if (Serial.available() > 0) {
+    char command = Serial.read();
+    handleCommand(command);
+  }
+
+  // Control pump based on current state
+  controlPump();
+}
+
+// ====================================
+// DEBOUNCE PIN 7 (PHYSICAL SWITCH)
+// ====================================
+void debouncePin7() {
+  bool reading = digitalRead(SWITCH_PIN);
+  
+  if (reading != lastSwitch7Reading) {
+    lastSwitch7DebounceTime = millis();
+  }
+  
+  if ((millis() - lastSwitch7DebounceTime) > debounceDelay) {
+    if (reading != switch7State) {
+      bool oldState = switch7State;
+      switch7State = reading;
+      
+      // State changed - this is a new input event
+      // NOTE: Using INPUT_PULLUP, so LOW = switch closed = ON
+      if (switch7State != oldState) {
+        lastControlSource = SOURCE_PIN7;
+        lastControlChangeTime = millis();
+        
+        // When PIN 7 takes control, disable random mode
+        randomMode = false;
+        
+        if (switch7State == LOW) {  // Switch closed (pulled to ground)
+          pumpShouldBeOn = true;
+          lastPulseTime = millis();  // Initialize pulse timing
+          Serial.println(F("\n>>> PIN 7: ON"));
+        } else {  // Switch open (pulled high)
+          pumpShouldBeOn = false;
+          Serial.println(F("\n>>> PIN 7: OFF"));
+        }
+      }
+    }
+  }
+  
+  lastSwitch7Reading = reading;
+}
+
+// ====================================
+// DEBOUNCE PIN 8 (MCU SIGNAL)
+// ====================================
+void debouncePin8() {
+  bool reading = digitalRead(MCU_SIGNAL_PIN);
+  
+  if (reading != lastMcu8Reading) {
+    lastMcu8DebounceTime = millis();
+  }
+  
+  if ((millis() - lastMcu8DebounceTime) > debounceDelay) {
+    if (reading != mcu8State) {
+      bool oldState = mcu8State;
+      mcu8State = reading;
+      
+      // State changed - this is a new input event
+      if (mcu8State != oldState) {
+        lastControlSource = SOURCE_PIN8;
+        lastControlChangeTime = millis();
+        
+        // When PIN 8 takes control, disable random mode
+        randomMode = false;
+        
+        if (mcu8State == LOW) {
+          pumpShouldBeOn = true;
+          lastPulseTime = millis();  // Initialize pulse timing
+          Serial.println(F("\n>>> PIN 8: ON"));
+        } else {
+          pumpShouldBeOn = false;
+          Serial.println(F("\n>>> PIN 8: OFF"));
+        }
+      }
+    }
+  }
+  
+  lastMcu8Reading = reading;
+}
+
+// ====================================
+// SELECT RANDOM FREQUENCY
+// ====================================
+void selectRandomFrequency() {
+  int randomIndex = random(0, 3); // 0, 1, or 2
+  currentRandomFreq = randomFreqOptions[randomIndex];
+  
+  // Set pulse interval based on selected frequency
+  switch(currentRandomFreq) {
+    case 1:
+      pulseInterval = 500;
+      break;
+    case 2:
+      pulseInterval = 250;
+      break;
+    case 5:
+      pulseInterval = 100;
+      break;
+  }
+  
+  Serial.print(F("\n    Next: "));
+  Serial.print(currentRandomFreq);
+  Serial.print(F(" Hz ("));
+  Serial.print(pulseInterval);
+  Serial.println(F("ms)"));
+}
+
+// ====================================
+// CONTROL PUMP
+// ====================================
+void controlPump() {
+  // If pump should be on (from any source), pulse it
+  if (pumpShouldBeOn) {
+    unsigned long currentTime = millis();
+    
+    if (currentTime - lastPulseTime >= pulseInterval) {
+      lastPulseTime = currentTime;
+      
+      // Store previous state before toggling
+      bool wasPulseOn = pulseState;
+      pulseState = !pulseState;
+      
+      digitalWrite(PUMP_PIN, pulseState ? HIGH : LOW);
+      
+      // Only print if serial is controlling (to avoid spam from switch/pin8)
+      if (lastControlSource == SOURCE_SERIAL) {
+        Serial.print(pulseState ? F("ON ") : F("OFF "));
+      }
+      
+      // If in random mode and we just turned OFF (was ON, now OFF), pick new frequency for next cycle
+      if (randomMode && wasPulseOn && !pulseState) {
+        selectRandomFrequency();
+      }
+    }
+  } 
+  // Otherwise turn pump off
+  else {
+    digitalWrite(PUMP_PIN, LOW);
+    pulseState = false;
+  }
+}
+
+// ====================================
+// SERIAL COMMAND HANDLER
+// ====================================
+void handleCommand(char cmd) {
+  switch(cmd) {
+    case '1':
+      randomMode = false;
+      selectedFreq = 1;
+      pulseInterval = 500;
+      Serial.println(F("\n>>> 1 Hz"));
+      break;
+      
+    case '2':
+      randomMode = false;
+      selectedFreq = 2;
+      pulseInterval = 250;
+      Serial.println(F("\n>>> 2 Hz"));
+      break;
+
+    case '5':
+      randomMode = false;
+      selectedFreq = 5;
+      pulseInterval = 100;
+      Serial.println(F("\n>>> 5 Hz"));
+      break;
+      
+    case 'R':
+    case 'r':
+      randomMode = true;
+      selectRandomFrequency();
+      selectedFreq = currentRandomFreq;
+      Serial.println(F("\n>>> Random Mode ON"));
+      Serial.print(F("    Start: "));
+      Serial.print(currentRandomFreq);
+      Serial.println(F(" Hz"));
+      break;
+
+    case 's':
+    case 'S':
+      // Serial takes control
+      lastControlSource = SOURCE_SERIAL;
+      lastControlChangeTime = millis();
+      serialPumpRunning = true;
+      pumpShouldBeOn = true;
+      lastPulseTime = millis();
+      
+      Serial.println(F("\n>>> SERIAL: START"));
+      if (randomMode) {
+        Serial.print(F("    Random ("));
+        Serial.print(currentRandomFreq);
+        Serial.println(F(" Hz)"));
+      } else {
+        Serial.print(F("    "));
+        Serial.print(selectedFreq);
+        Serial.println(F(" Hz"));
+      }
+      break;
+      
+    case 'x':
+    case 'X':
+      // Serial takes control and turns off
+      lastControlSource = SOURCE_SERIAL;
+      lastControlChangeTime = millis();
+      serialPumpRunning = false;
+      pumpShouldBeOn = false;
+      
+      Serial.println(F("\n>>> SERIAL: STOP"));
+      break;
+      
+    case 'i':
+    case 'I':
+      printStatus();
+      break;
+      
+    case 'm':
+    case 'M':
+      printMenu();
+      break;
+      
+    case '\n':
+    case '\r':
+      break;
+      
+    default:
+      Serial.println(F("\n>>> Invalid! Press M"));
+      break;
+  }
+}
+
+// ====================================
+// PRINT STATUS
+// ====================================
+void printStatus() {
+  Serial.println(F("\n========================================"));
+  Serial.println(F("           CURRENT STATUS"));
+  Serial.println(F("========================================"));
+  Serial.print(F("Pin 7:  "));
+  Serial.println(switch7State == LOW ? F("ON") : F("OFF"));
+  
+  Serial.print(F("Pin 8:  "));
+  Serial.println(mcu8State == LOW ? F("ON") : F("OFF")); 
+  
+  Serial.print(F("Serial: "));
+  Serial.println(serialPumpRunning ? F("ACTIVE") : F("INACTIVE"));
+  
+  Serial.print(F("Mode:   "));
+  if (randomMode) {
+    Serial.print(F("RANDOM ("));
+    Serial.print(currentRandomFreq);
+    Serial.println(F(" Hz)"));
+  } else {
+    Serial.print(selectedFreq);
+    Serial.println(F(" Hz"));
+  }
+  
+  Serial.println(F("----------------------------------------"));
+  Serial.print(F("Control: "));
+  switch(lastControlSource) {
+    case SOURCE_PIN7:   Serial.println(F("PIN 7")); break;
+    case SOURCE_PIN8:   Serial.println(F("PIN 8")); break;
+    case SOURCE_SERIAL: Serial.println(F("SERIAL")); break;
+    case SOURCE_NONE:   Serial.println(F("NONE")); break;
+  }
+  Serial.print(F("Pump:    "));
+  Serial.println(digitalRead(PUMP_PIN) == HIGH ? F("ON") : F("OFF"));
+  Serial.println(F("========================================\n"));
+}
